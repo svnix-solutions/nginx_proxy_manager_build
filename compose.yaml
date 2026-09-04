@@ -41,6 +41,27 @@ services:
       - tunnel
       - default
 
+  # One-off backup job, kept out of normal deploys by the profile. Invoked by
+  # a Komodo procedure via RunStackService.
+  #
+  # Runs on alpine rather than the NPM image, which ships no sqlite3 -- and a
+  # plain copy of a live SQLite file can capture a torn write.
+  backup:
+    image: alpine:3
+    profiles: ["backup"]
+    restart: "no"
+    environment:
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - npm_data:/data
+      - ./backup.sh:/usr/local/bin/backup.sh:ro
+      - type: bind
+        source: ${NPMBACKUP_PATH:?NPMBACKUP_PATH is required}
+        target: /backup
+        bind:
+          create_host_path: false
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache sqlite tar >/dev/null && exec /bin/sh /usr/local/bin/backup.sh"]
+
 volumes:
   npm_data:
   npm_letsencrypt:

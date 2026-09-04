@@ -1,0 +1,53 @@
+# Nginx Proxy Manager on Node1.
+#
+# Sits between the Cloudflare Tunnel and the backends: cloudflared reaches it
+# over the shared "cloudflared" network as http://nginx-proxy-manager:80, and
+# NPM routes by hostname to whatever you configure.
+#
+# Deliberately publishes NO public ports. 80/443 stay internal to the
+# cloudflared network -- the tunnel is the only ingress, so there is nothing to
+# firewall. Only the admin UI is exposed, and only on Node1's LAN address.
+#
+# TLS note: Cloudflare terminates TLS at its edge, so NPM should serve plain
+# HTTP to the tunnel. Do not bother with Let's Encrypt certificates in NPM --
+# HTTP-01 challenges cannot work without a publicly reachable port 80, and the
+# certificate would be redundant behind the tunnel anyway.
+
+services:
+  npm:
+    image: jc21/nginx-proxy-manager:2
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    environment:
+      DISABLE_IPV6: "true"
+      # Applied only when the database is first created. Changing these later
+      # has no effect -- change the password in the NPM UI instead.
+      INITIAL_ADMIN_EMAIL: ${NPM_ADMIN_EMAIL:?NPM_ADMIN_EMAIL is required}
+      INITIAL_ADMIN_PASSWORD: ${NPM_ADMIN_PASSWORD:?NPM_ADMIN_PASSWORD is required}
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    # Admin UI only, bound to Node1's LAN address. 80/443 are intentionally
+    # unpublished; the tunnel reaches them over the docker network.
+    ports:
+      - "${NPM_ADMIN_BIND:-127.0.0.1}:81:81"
+    healthcheck:
+      test: ["CMD", "/usr/bin/check-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - tunnel
+      - default
+
+volumes:
+  npm_data:
+  npm_letsencrypt:
+
+networks:
+  # Shared with the cloudflared connector so the tunnel can route to NPM by
+  # container name. Created once per host: docker network create cloudflared
+  tunnel:
+    external: true
+    name: ${CLOUDFLARE_TUNNEL_NETWORK:-cloudflared}

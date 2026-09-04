@@ -97,9 +97,57 @@ point of having it in the path.
 
 ---
 
+## Backups
+
+NPM keeps its state in SQLite **plus** files that are not in the database —
+`keys.json` (JWT signing keys), access lists, custom certificates. So the
+`/data` volume is what needs backing up, not just the database.
+
+```bash
+docker compose --profile backup run --rm backup
+```
+
+Output is `npm-data-<UTC timestamp>.tar.gz`, pruned after
+`BACKUP_RETENTION_DAYS`. `NPMBACKUP_PATH` must point at an **already-mounted**
+volume containing a sentinel file:
+
+```bash
+echo "sentinel" > /mnt/npmbackup/.npmbackup-target
+```
+
+### Why it does not just copy the file
+
+A plain `cp` of a live SQLite database can capture a **torn write** and produce
+an archive that restores into a corrupt database — and you would not find out
+until you needed it. The job instead uses SQLite's online backup API
+(`.backup`), which is safe against concurrent writers, then runs
+`pragma integrity_check` on the result.
+
+That is also why the job runs on `alpine` rather than the NPM image: NPM ships
+no `sqlite3` binary.
+
+| Guard | Failure it prevents |
+| --- | --- |
+| `sqlite3 .backup` + `integrity_check` | a torn copy of a live database |
+| `set -o pipefail` | a staging failure passing silently into the archive |
+| write to `.partial`, `gzip -t`, `tar -tzf`, then rename | an interrupted run leaving a file that looks complete |
+| sentinel file check | the NAS is not mounted, and "backups" fill local disk |
+
+### Restoring
+
+```bash
+docker compose down
+docker run --rm -v npm_data:/data -v /mnt/npmbackup:/backup alpine:3 \
+  sh -c 'rm -rf /data/* && tar -xzf /backup/npm-data-<ts>.tar.gz -C /data'
+docker compose up -d
+```
+
+---
+
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `compose.yaml` | the stack definition |
+| `backup.sh` | snapshot `/data`, verify, prune |
 | `.env.example` | template for `.env` |

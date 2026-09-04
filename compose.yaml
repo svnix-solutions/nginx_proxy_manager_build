@@ -55,16 +55,30 @@ services:
     volumes:
       - npm_data:/data
       - ./backup.sh:/usr/local/bin/backup.sh:ro
-      - type: bind
-        source: ${NPMBACKUP_PATH:?NPMBACKUP_PATH is required}
-        target: /backup
-        bind:
-          create_host_path: false
+      - npm_backup:/backup
     entrypoint: ["/bin/sh", "-c", "apk add --no-cache sqlite tar >/dev/null && exec /bin/sh /usr/local/bin/backup.sh"]
 
 volumes:
   npm_data:
   npm_letsencrypt:
+  # NFS-backed volume for the backup target. The Docker daemon performs the
+  # mount, so the host needs no fstab entry and no nfs-common -- which matters
+  # when Periphery itself runs as an unprivileged container and cannot mount
+  # anything on the host.
+  #
+  # If you would rather use an already-mounted host path, replace this with:
+  #   npm_backup:
+  #     driver: local
+  #     driver_opts:
+  #       type: none
+  #       o: bind
+  #       device: /mnt/npmbackup
+  npm_backup:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=${NPMBACKUP_NFS_ADDR:?NPMBACKUP_NFS_ADDR is required},nfsvers=4.1,rw,hard,timeo=600,retrans=2"
+      device: ":${NPMBACKUP_NFS_EXPORT:?NPMBACKUP_NFS_EXPORT is required}"
 
 networks:
   # Shared with the cloudflared connector so the tunnel can route to NPM by

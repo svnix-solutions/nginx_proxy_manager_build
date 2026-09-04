@@ -108,11 +108,20 @@ docker compose --profile backup run --rm backup
 ```
 
 Output is `npm-data-<UTC timestamp>.tar.gz`, pruned after
-`BACKUP_RETENTION_DAYS`. `NPMBACKUP_PATH` must point at an **already-mounted**
-volume containing a sentinel file:
+`BACKUP_RETENTION_DAYS`.
+
+The backup target is an **NFS-backed Docker volume** — the Docker daemon
+performs the mount, so the host needs no `fstab` entry and no `nfs-common`.
+That matters when Komodo's Periphery runs as an unprivileged container on the
+host, since it cannot mount anything there itself. Set `NPMBACKUP_NFS_ADDR`
+and `NPMBACKUP_NFS_EXPORT`; to use an already-mounted host path instead, see
+the commented alternative in `compose.yaml`.
+
+The target must contain a sentinel file:
 
 ```bash
-echo "sentinel" > /mnt/npmbackup/.npmbackup-target
+docker run --rm -v npm_backup:/backup alpine:3 \
+  sh -c 'echo sentinel > /backup/.npmbackup-target'
 ```
 
 ### Why it does not just copy the file
@@ -137,7 +146,7 @@ no `sqlite3` binary.
 
 ```bash
 docker compose down
-docker run --rm -v npm_data:/data -v /mnt/npmbackup:/backup alpine:3 \
+docker run --rm -v npm_data:/data -v npm_backup:/backup alpine:3 \
   sh -c 'rm -rf /data/* && tar -xzf /backup/npm-data-<ts>.tar.gz -C /data'
 docker compose up -d
 ```

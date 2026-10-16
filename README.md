@@ -41,6 +41,19 @@ because both containers share the `cloudflared` network.
 
 ---
 
+## Backend network (`compose.proxy.yaml`)
+
+To keep apps off the tunnel network, add the override:
+
+```toml
+file_paths = ["compose.yaml", "compose.proxy.yaml"]
+```
+
+NPM then also joins an external `proxy` network (`PROXY_NETWORK`, default
+`proxy`; create it once with `docker network create proxy`). Apps join `proxy`
+only, so the path is `cloudflared ──(cloudflared)──► NPM ──(proxy)──► app`, and
+the tunnel connector has no direct route to any backend.
+
 ## No public ports
 
 Ports 80 and 443 are deliberately **not published**. They exist only on the

@@ -1,0 +1,22 @@
+# Override: attach NPM to an internal "proxy" network for its backends.
+#
+# Use with:  file_paths = ["compose.yaml", "compose.proxy.yaml"]
+#
+# Without this, backends would have to join the "cloudflared" network to be
+# reachable, which also puts them in direct reach of the tunnel connector.
+# With it, only cloudflared and NPM share the tunnel network:
+#
+#   cloudflared ──(cloudflared)──► NPM ──(proxy)──► apps
+#
+# Apps join "proxy" only, and NPM forwards to them by container name.
+# Create once per host:  docker network create proxy
+
+services:
+  npm:
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

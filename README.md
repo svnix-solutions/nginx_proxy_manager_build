@@ -99,8 +99,9 @@ the NPM UI.
 1. **Cloudflare Zero Trust → Networks → Tunnels → Public Hostname**
    Service: `http://nginx-proxy-manager:80`
 2. **NPM → Hosts → Proxy Hosts → Add**
-   Domain: the same hostname. Forward to either a container name on the
-   `cloudflared` network, or a `host:port` reachable from this host.
+   Domain: the same hostname. Forward to a container name on the `proxy`
+   network (with `compose.proxy.yaml`), or a `host:port` reachable from this
+   host. Avoid putting backends on the `cloudflared` network itself.
 
 Send one wildcard hostname to NPM and let it do the routing — that is the
 point of having it in the path.
